@@ -1,0 +1,1932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowchart Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <style>
+        .flowchart-canvas {
+            background: linear-gradient(90deg, #f1f5f9 1px, transparent 1px),
+                        linear-gradient(180deg, #f1f5f9 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #ffffff;
+        }
+        #hierarchyInput {
+            tab-size: 4;
+            -moz-tab-size: 4;
+        }
+        .tree-preview {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace;
+            line-height: 1.5;
+        }
+        .tree-line {
+            color: #94a3b8;
+            font-weight: normal;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        #flowchartCanvas {
+            cursor: grab;
+        }
+        #flowchartCanvas:active {
+            cursor: grabbing;
+        }
+        .drag-hint {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-7xl">
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-slate-800 mb-1">Flowchart Generator</h1>
+            <p class="text-slate-500 text-sm">Generate flowcharts from .docx files or text hierarchy • Drag to rearrange • Export as A4 Landscape PNG</p>
+        </div>
+
+        <!-- Input Section - Full Width -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-5">
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <h2 class="text-lg font-semibold text-slate-700">Input Hierarchy</h2>
+                
+                <!-- File Upload Inline -->
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 hover:border-slate-400 transition cursor-pointer bg-slate-50" id="dropZone">
+                        <input type="file" id="fileInput" accept=".docx" class="hidden">
+                        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <span class="text-sm text-slate-600" id="fileName">Upload .docx</span>
+                    </div>
+                    
+                    <!-- Templates Dropdown -->
+                    <select id="templateSelect" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 hover:border-slate-400 transition">
+                        <option value="">Load Template...</option>
+                        <option value="process">Process Flow</option>
+                        <option value="org">Organization Chart</option>
+                        <option value="project">Project Breakdown</option>
+                        <option value="deep">Deep Hierarchy (10 levels)</option>
+                        <option value="longText">Long Text Example</option>
+                        <option value="anatomy">Anatomy (Abdominal Aorta)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Text Input and Tree Preview Side by Side - Full Width -->
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Edit Hierarchy (use Tab to indent)</label>
+                    <textarea id="hierarchyInput" rows="18" class="w-full border border-slate-300 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400 bg-white resize-none" placeholder="Enter hierarchy using indentation:
+
+Project
+    Phase 1
+        Task A
+        Task B
+    Phase 2
+        Task C
+        Task D
+
+Use Tab/Shift+Tab to indent/unindent"></textarea>
+                    <div class="mt-2 flex gap-3 text-xs text-slate-400">
+                        <span><kbd class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">Tab</kbd> indent</span>
+                        <span><kbd class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">Shift+Tab</kbd> unindent</span>
+                        <span><kbd class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">Enter</kbd> auto-indent</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide">Live Tree Preview</label>
+                        <div class="flex items-center gap-2">
+                            <span id="treeColorLabel" class="text-xs text-slate-400">Pastel Rainbow</span>
+                            <button id="exportTreeBtn" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1 rounded-lg transition flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                </svg>
+                                Export Tree
+                            </button>
+                        </div>
+                    </div>
+                    <div id="treePreview" class="tree-preview w-full h-[432px] border border-slate-200 bg-white rounded-lg p-4 text-sm overflow-auto">
+                        <p class="text-slate-400 italic">Tree structure preview will appear here...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options Row -->
+            <div class="flex flex-wrap items-end gap-4 pt-4 border-t border-slate-100">
+                <div class="flex-1 min-w-[140px]">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Color Scheme</label>
+                    <select id="colorScheme" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="pastel">Pastel Rainbow</option>
+                        <option value="soft">Soft Tones</option>
+                        <option value="ocean">Ocean Blues</option>
+                        <option value="forest">Forest Greens</option>
+                        <option value="sunset">Warm Sunset</option>
+                        <option value="lavender">Lavender Dreams</option>
+                        <option value="monotone">Monotone (Gray)</option>
+                    </select>
+                </div>
+                <div class="flex-1 min-w-[100px]">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Font Size</label>
+                    <select id="fontSize" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="14">14pt (Small)</option>
+                        <option value="16">16pt (Medium)</option>
+                        <option value="18" selected>18pt (Default)</option>
+                        <option value="20">20pt (Large)</option>
+                        <option value="22">22pt (X-Large)</option>
+                        <option value="24">24pt (XX-Large)</option>
+                    </select>
+                </div>
+                <div class="flex-1 min-w-[100px]">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Box Style</label>
+                    <select id="boxStyle" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="rounded">Rounded</option>
+                        <option value="rectangle">Rectangle</option>
+                        <option value="pill">Pill</option>
+                    </select>
+                </div>
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Layout Direction</label>
+                    <select id="layoutStyle" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="vertical">Top-Down (Vertical)</option>
+                        <option value="horizontal">Left-Right (Horizontal)</option>
+                    </select>
+                </div>
+                <button id="generateBtn" class="bg-slate-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-700 transition flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    Generate
+                </button>
+            </div>
+        </div>
+
+        <!-- Output Section - Full Width -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+            <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-700">Flowchart Preview</h2>
+                    <p id="canvasInfo" class="text-xs text-slate-400 mt-0.5">A4 Landscape ratio • Drag nodes to rearrange</p>
+                </div>
+                <div class="flex gap-2 items-center flex-wrap">
+                    <label class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer select-none">
+                        <input type="checkbox" id="moveBranches" checked class="w-4 h-4 accent-purple-600">
+                        <span class="text-sm text-slate-700">Move with branches</span>
+                    </label>
+                    <span class="drag-hint">🖱️ Drag nodes to rearrange</span>
+                    <div class="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg">
+                        <label class="text-xs text-slate-600">Quality:</label>
+                        <select id="exportQuality" class="text-sm bg-white border border-slate-300 rounded px-2 py-1">
+                            <option value="1">1x (Screen)</option>
+                            <option value="2" selected>2x (Print)</option>
+                            <option value="3">3x (High-Res)</option>
+                            <option value="4">4x (Poster)</option>
+                        </select>
+                    </div>
+                    <button id="exportPng" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        Export PNG (Exact View)
+                    </button>
+                    <button id="exportTxt" class="bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Export TXT
+                    </button>
+                    <button id="exportDrawio" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
+                        </svg>
+                        Export draw.io
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Export Info -->
+            <div id="pageInfo" class="hidden mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="text-blue-800 font-medium" id="pageCount">Canvas ready for export</span>
+                    </div>
+                    <div class="text-xs text-blue-600" id="pageDimensions"></div>
+                </div>
+            </div>
+            
+            <!-- Zoom Controls -->
+            <div class="flex items-center gap-3 mb-3 pb-3 border-b border-slate-100">
+                <span class="text-sm font-medium text-slate-600">Zoom:</span>
+                <button id="zoomOut" class="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-bold transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                    </svg>
+                </button>
+                <input type="range" id="zoomSlider" min="25" max="200" value="100" class="w-32 h-2 accent-slate-600">
+                <button id="zoomIn" class="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-bold transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                </button>
+                <span id="zoomLevel" class="text-sm font-mono text-slate-600 w-12">100%</span>
+                <button id="zoomReset" class="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition">Reset</button>
+                <button id="zoomFit" class="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition">Fit to View</button>
+            </div>
+            
+            <div id="canvasContainer" class="border border-slate-200 rounded-lg overflow-auto flowchart-canvas" style="max-height: 700px;">
+                <div id="canvasWrapper" style="transform-origin: top left;">
+                    <canvas id="flowchartCanvas" class="bg-white"></canvas>
+                </div>
+            </div>
+
+            <!-- Color Legend -->
+            <div id="colorLegend" class="mt-4 flex flex-wrap gap-2 items-center text-xs text-slate-500">
+                <span class="font-medium text-slate-600">Levels:</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Templates
+        const templates = {
+            process: `Start
+    Input Data
+    Process Data
+        Validate
+        Transform
+        Calculate
+    Review Results
+    Output Report
+End`,
+            org: `CEO
+    CTO
+        Engineering Lead
+            Senior Developer
+            Junior Developer
+        QA Lead
+            QA Engineer
+    CFO
+        Finance Manager
+        Accountant
+    CMO
+        Marketing Manager
+        Sales Lead`,
+            project: `Website Redesign
+    Planning
+        Requirements Gathering
+        Stakeholder Interviews
+        Project Timeline
+    Design
+        Wireframes
+        UI Mockups
+        Design Review
+    Development
+        Frontend
+            HTML/CSS
+            JavaScript
+        Backend
+            API Development
+            Database
+    Testing
+        Unit Tests
+        User Testing
+    Deployment`,
+            deep: `Company
+    Division A
+        Department 1
+            Team Alpha
+                Project X
+                    Phase 1
+                        Task 1.1
+                            Subtask A
+                                Detail 1
+                                    Action Item
+                            Subtask B
+                        Task 1.2
+                    Phase 2
+                Project Y
+            Team Beta
+        Department 2
+    Division B
+        Department 3
+        Department 4`,
+            longText: `Website Redesign Project
+    Planning and Discovery Phase
+        Gather Requirements from Stakeholders
+        Conduct User Research Sessions
+        Create Project Timeline
+    Design Phase
+        Create Wireframes and Mockups
+        Design User Interface Components
+        Review with Design Team
+    Development Phase
+        Frontend Development
+            Build Responsive HTML CSS
+            Implement JavaScript Features
+        Backend Development
+            Create API Endpoints
+            Setup Database Schema
+    Testing and Quality Assurance
+        Unit Testing
+        User Acceptance Testing
+    Deployment and Launch`,
+            anatomy: `Abdominal Aorta
+    Coeliac Trunk
+        Left Gastric Artery
+            Esophageal branches
+            Gastric Branches
+        Common Hepatic Artery
+            Gastroduodenal Artery
+                Right Gastroepiploic Artery
+                Superior Pancreaticoduonenal Artery
+                Supraduodenal Artery of Wilkie
+            Proper Hepatic Artery
+                Right Gastric Artery
+                Left Hepatic Artery
+                Right Hepatic Artery
+                    Cystic Artery
+                        Superficial Branches
+                            Deep Branches
+        Splenic Artery
+            Pancreatic Branches
+                Arteria pancreatica magna
+                Arteria pancreatica caudae
+            Left Gastroepiploic Artery
+                Gastric Branches
+                Omental Branches
+            Short Gastric Arteries
+    Superior Mesenteric Artery
+        Middle Colic Artery
+            Right Branch
+            Left Branch
+        Inferior Pancreaticoduonenal Artery
+        Right Colic Artery
+            Ascending Branch
+            Descending Branch
+        Ileocolic Artery
+            Branch to terminal part of ilium
+            Cecal Branch
+            Appendicular Branch
+            Branch to beginning part of ascending colon
+    Inferior Mesenteric Artery
+        Left Colic Artery
+            Ascending Branch
+            Descending Branch
+        Sigmoid Arteries (2-4)
+        Superior Rectal
+            Left Branch
+            Right Branch`
+        };
+
+        // 10 level color schemes - Light pastel colors
+        const colorSchemes = {
+            pastel: ['#DBEAFE', '#D1FAE5', '#FEF3C7', '#FCE4EC', '#E9D5FF', '#CFFAFE', '#FEE2E2', '#E0E7FF', '#D5F5F6', '#FDF4FF'],
+            soft: ['#E0F2FE', '#DCFCE7', '#FEF9C3', '#FFE4E6', '#F3E8FF', '#CCFBF1', '#FFEDD5', '#EDE9FE', '#E0F2FE', '#FDF2F8'],
+            ocean: ['#DBEAFE', '#BFDBFE', '#93C5FD', '#60A5FA', '#3B82F6', '#2563EB', '#1D4ED8', '#1E40AF', '#1E3A8A', '#172554'],
+            forest: ['#DCFCE7', '#BBF7D0', '#86EFAC', '#4ADE80', '#22C55E', '#16A34A', '#15803D', '#166534', '#14532D', '#052E16'],
+            sunset: ['#FEF3C7', '#FDE68A', '#FCD34D', '#FBBF24', '#F59E0B', '#FECACA', '#FCA5A5', '#F87171', '#EF4444', '#DC2626'],
+            lavender: ['#F3E8FF', '#E9D5FF', '#D8B4FE', '#C084FC', '#A855F7', '#9333EA', '#7C3AED', '#6D28D9', '#5B21B6', '#4C1D95'],
+            monotone: ['#F8FAFC', '#F1F5F9', '#E2E8F0', '#E2E8F0', '#CBD5E1', '#CBD5E1', '#E2E8F0', '#F1F5F9', '#F8FAFC', '#F1F5F9']
+        };
+
+        // Text colors for each level (dark for light backgrounds)
+        const textColors = {
+            pastel: ['#1E40AF', '#166534', '#92400E', '#BE185D', '#7C3AED', '#0E7490', '#DC2626', '#4338CA', '#0F766E', '#A21CAF'],
+            soft: ['#0369A1', '#166534', '#A16207', '#BE123C', '#7C3AED', '#0F766E', '#C2410C', '#6D28D9', '#0369A1', '#BE185D'],
+            ocean: ['#1E40AF', '#1E40AF', '#1E3A8A', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF'],
+            forest: ['#166534', '#166534', '#166534', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF'],
+            sunset: ['#92400E', '#92400E', '#92400E', '#92400E', '#92400E', '#7F1D1D', '#7F1D1D', '#FFFFFF', '#FFFFFF', '#FFFFFF'],
+            lavender: ['#7C3AED', '#7C3AED', '#6D28D9', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF'],
+            monotone: ['#334155', '#475569', '#475569', '#334155', '#1E293B', '#1E293B', '#334155', '#475569', '#334155', '#475569']
+        };
+
+        // Border colors for each level
+        const borderColors = {
+            pastel: ['#3B82F6', '#22C55E', '#F59E0B', '#EC4899', '#A855F7', '#06B6D4', '#EF4444', '#6366F1', '#14B8A6', '#D946EF'],
+            soft: ['#0EA5E9', '#22C55E', '#EAB308', '#F43F5E', '#A855F7', '#14B8A6', '#F97316', '#8B5CF6', '#0EA5E9', '#EC4899'],
+            ocean: ['#3B82F6', '#3B82F6', '#2563EB', '#1D4ED8', '#1D4ED8', '#1E40AF', '#1E40AF', '#1E3A8A', '#1E3A8A', '#172554'],
+            forest: ['#22C55E', '#22C55E', '#16A34A', '#15803D', '#15803D', '#166534', '#166534', '#14532D', '#14532D', '#052E16'],
+            sunset: ['#F59E0B', '#F59E0B', '#F59E0B', '#F59E0B', '#D97706', '#EF4444', '#EF4444', '#DC2626', '#DC2626', '#B91C1C'],
+            lavender: ['#A855F7', '#A855F7', '#9333EA', '#7C3AED', '#7C3AED', '#6D28D9', '#6D28D9', '#5B21B6', '#5B21B6', '#4C1D95'],
+            monotone: ['#64748B', '#475569', '#334155', '#1E293B', '#0F172A', '#1E293B', '#334155', '#475569', '#64748B', '#475569']
+        };
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const hierarchyInput = document.getElementById('hierarchyInput');
+        const treePreview = document.getElementById('treePreview');
+        const generateBtn = document.getElementById('generateBtn');
+        const exportPngBtn = document.getElementById('exportPng');
+        const exportTxtBtn = document.getElementById('exportTxt');
+        const templateSelect = document.getElementById('templateSelect');
+        const canvas = document.getElementById('flowchartCanvas');
+        const ctx = canvas.getContext('2d');
+        const canvasInfo = document.getElementById('canvasInfo');
+        const fileName = document.getElementById('fileName');
+
+        let currentHierarchy = [];
+        let maxLevel = 0;
+        
+        // Store all nodes for drag and drop
+        let allNodes = [];
+        let isDragging = false;
+        let dragNode = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let currentOptions = {};
+        let canvasScale = 2;
+        let displayWidth = 1190;
+        let displayHeight = 842;
+        let currentZoom = 100;
+        
+        // Zoom elements
+        const zoomSlider = document.getElementById('zoomSlider');
+        const zoomLevel = document.getElementById('zoomLevel');
+        const zoomIn = document.getElementById('zoomIn');
+        const zoomOut = document.getElementById('zoomOut');
+        const zoomReset = document.getElementById('zoomReset');
+        const zoomFit = document.getElementById('zoomFit');
+        const canvasWrapper = document.getElementById('canvasWrapper');
+        const canvasContainer = document.getElementById('canvasContainer');
+        
+        // Zoom functions
+        function setZoom(zoom) {
+            currentZoom = Math.max(25, Math.min(200, zoom));
+            zoomSlider.value = currentZoom;
+            zoomLevel.textContent = currentZoom + '%';
+            canvasWrapper.style.transform = `scale(${currentZoom / 100})`;
+        }
+        
+        zoomSlider.addEventListener('input', (e) => {
+            setZoom(parseInt(e.target.value));
+        });
+        
+        zoomIn.addEventListener('click', () => {
+            setZoom(currentZoom + 10);
+        });
+        
+        zoomOut.addEventListener('click', () => {
+            setZoom(currentZoom - 10);
+        });
+        
+        zoomReset.addEventListener('click', () => {
+            setZoom(100);
+        });
+        
+        zoomFit.addEventListener('click', () => {
+            if (displayWidth > 0 && displayHeight > 0) {
+                const containerWidth = canvasContainer.clientWidth - 20;
+                const containerHeight = 680;
+                const fitZoomW = (containerWidth / displayWidth) * 100;
+                const fitZoomH = (containerHeight / displayHeight) * 100;
+                setZoom(Math.floor(Math.min(fitZoomW, fitZoomH)));
+            }
+        });
+        
+        // Mouse wheel zoom
+        canvasContainer.addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -10 : 10;
+                setZoom(currentZoom + delta);
+            }
+        }, { passive: false });
+
+        // Spacing constants
+        const NODE_H_SPACING = 40;
+        const NODE_V_SPACING = 50;
+        const LEVEL_GAP = 120;
+        const MAX_NODE_WIDTH = 220;
+        const MIN_NODE_WIDTH = 100;
+
+        // Wrap text to fit within max width
+        function wrapText(text, fontSize, maxWidth) {
+            ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+
+            for (const word of words) {
+                const testLine = currentLine ? currentLine + ' ' + word : word;
+                const metrics = ctx.measureText(testLine);
+                
+                if (metrics.width > maxWidth - 32 && currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            
+            if (currentLine) {
+                lines.push(currentLine);
+            }
+            
+            return lines.length > 0 ? lines : [text];
+        }
+
+        // Tab key support in textarea
+        hierarchyInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = hierarchyInput.selectionStart;
+                const end = hierarchyInput.selectionEnd;
+                const value = hierarchyInput.value;
+                
+                if (e.shiftKey) {
+                    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+                    const lineContent = value.substring(lineStart, end);
+                    
+                    if (lineContent.startsWith('    ')) {
+                        hierarchyInput.value = value.substring(0, lineStart) + value.substring(lineStart + 4);
+                        hierarchyInput.selectionStart = hierarchyInput.selectionEnd = Math.max(lineStart, start - 4);
+                    } else if (lineContent.startsWith('\t')) {
+                        hierarchyInput.value = value.substring(0, lineStart) + value.substring(lineStart + 1);
+                        hierarchyInput.selectionStart = hierarchyInput.selectionEnd = Math.max(lineStart, start - 1);
+                    }
+                } else {
+                    hierarchyInput.value = value.substring(0, start) + '    ' + value.substring(end);
+                    hierarchyInput.selectionStart = hierarchyInput.selectionEnd = start + 4;
+                }
+                updateTreePreview();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const start = hierarchyInput.selectionStart;
+                const value = hierarchyInput.value;
+                const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+                const currentLine = value.substring(lineStart, start);
+                const indent = currentLine.match(/^(\s*)/)[1];
+                
+                hierarchyInput.value = value.substring(0, start) + '\n' + indent + value.substring(start);
+                hierarchyInput.selectionStart = hierarchyInput.selectionEnd = start + 1 + indent.length;
+                updateTreePreview();
+            }
+        });
+
+        hierarchyInput.addEventListener('input', updateTreePreview);
+
+        // Number formatting helpers
+        function toRoman(num) {
+            const romanNumerals = [
+                ['x', 10], ['ix', 9], ['v', 5], ['iv', 4], ['i', 1]
+            ];
+            let result = '';
+            for (const [letter, value] of romanNumerals) {
+                while (num >= value) {
+                    result += letter;
+                    num -= value;
+                }
+            }
+            return result;
+        }
+        
+        function toUpperRoman(num) {
+            return toRoman(num).toUpperCase();
+        }
+        
+        function toLetter(num) {
+            // 1 -> a, 2 -> b, ..., 26 -> z, 27 -> aa
+            let result = '';
+            while (num > 0) {
+                num--;
+                result = String.fromCharCode(97 + (num % 26)) + result;
+                num = Math.floor(num / 26);
+            }
+            return result;
+        }
+        
+        function toUpperLetter(num) {
+            return toLetter(num).toUpperCase();
+        }
+        
+        // Get bullet/number for a specific level and count
+        // Consistent pattern: Numbers → Letters → Roman, then repeat with different decorators
+        function getBullet(level, count) {
+            const styles = [
+                (n) => n.toString(),              // Level 0: 1, 2, 3
+                (n) => toLetter(n),               // Level 1: a, b, c
+                (n) => toRoman(n),                // Level 2: i, ii, iii
+                (n) => n.toString() + '.',        // Level 3: 1., 2., 3.
+                (n) => toLetter(n) + '.',         // Level 4: a., b., c.
+                (n) => toRoman(n) + '.',          // Level 5: i., ii., iii.
+                (n) => '(' + n.toString() + ')',  // Level 6: (1), (2), (3)
+                (n) => '(' + toLetter(n) + ')',   // Level 7: (a), (b), (c)
+                (n) => '(' + toRoman(n) + ')',    // Level 8: (i), (ii), (iii)
+                (n) => n.toString() + ')',        // Level 9: 1), 2), 3)
+            ];
+            const styleIndex = level % styles.length;
+            return styles[styleIndex](count);
+        }
+
+        // Generate tree preview with branch lines and colored level numbers
+        function updateTreePreview() {
+            const text = hierarchyInput.value;
+            if (!text.trim()) {
+                treePreview.innerHTML = '<p class="text-slate-400 italic">Tree structure preview will appear here...</p>';
+                return;
+            }
+
+            const lines = text.split('\n');
+            const parsed = [];
+            maxLevel = 0;
+            
+            // Track numbering at each level
+            const levelCounters = {};
+            
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                const indent = line.search(/\S/);
+                const level = Math.floor(indent / 4) || (indent > 0 ? Math.floor(indent / 2) : 0);
+                maxLevel = Math.max(maxLevel, level);
+                
+                // Reset counters for deeper levels when going to shallower level
+                Object.keys(levelCounters).forEach(l => {
+                    if (parseInt(l) > level) delete levelCounters[l];
+                });
+                
+                // Increment counter for this level
+                levelCounters[level] = (levelCounters[level] || 0) + 1;
+                
+                // Get styled bullet for this level
+                const bullet = getBullet(level, levelCounters[level]);
+                
+                parsed.push({ text: line.trim(), level, bullet });
+            });
+
+            const scheme = document.getElementById('colorScheme').value;
+            const borders = borderColors[scheme] || borderColors.pastel;
+            const bgColors = colorSchemes[scheme] || colorSchemes.pastel;
+            
+            let html = '';
+            
+            parsed.forEach((item, index) => {
+                let prefix = '';
+                
+                for (let i = 0; i < item.level; i++) {
+                    if (i < item.level - 1) {
+                        let hasMoreAtThisLevel = false;
+                        for (let j = index + 1; j < parsed.length; j++) {
+                            if (parsed[j].level <= i) {
+                                hasMoreAtThisLevel = parsed.slice(index + 1, j).some(p => p.level === i + 1);
+                                break;
+                            }
+                            if (parsed[j].level === i + 1) {
+                                hasMoreAtThisLevel = true;
+                            }
+                        }
+                        prefix += hasMoreAtThisLevel ? '<span class="tree-line">│   </span>' : '<span class="tree-line">    </span>';
+                    } else {
+                        let siblingAfter = false;
+                        for (let j = index + 1; j < parsed.length; j++) {
+                            if (parsed[j].level < item.level) break;
+                            if (parsed[j].level === item.level) {
+                                siblingAfter = true;
+                                break;
+                            }
+                        }
+                        prefix += siblingAfter ? '<span class="tree-line">├── </span>' : '<span class="tree-line">└── </span>';
+                    }
+                }
+                
+                const borderColor = borders[Math.min(item.level, borders.length - 1)];
+                const bgColor = bgColors[Math.min(item.level, bgColors.length - 1)];
+                
+                // Colored bullet badge with level-appropriate style
+                const bulletBadge = `<span style="background: ${bgColor}; color: ${borderColor}; border: 1px solid ${borderColor}; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 6px; min-width: 20px; display: inline-block; text-align: center;">${item.bullet}</span>`;
+                
+                html += `<div class="whitespace-pre" style="margin: 2px 0;">${prefix}${bulletBadge}<span style="color: #334155; font-weight: 500;">${escapeHtml(item.text)}</span></div>`;
+            });
+            
+            treePreview.innerHTML = html || '<p class="text-slate-400 italic">Tree structure preview will appear here...</p>';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // File upload handling
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-slate-400', 'bg-slate-100');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-slate-400', 'bg-slate-100');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-slate-400', 'bg-slate-100');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.docx')) {
+                processDocx(file);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processDocx(file);
+        });
+
+        // Process .docx file
+        async function processDocx(file) {
+            fileName.textContent = file.name;
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.convertToHtml({ arrayBuffer });
+                const html = result.value;
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const hierarchyText = parseHtmlToHierarchy(doc.body);
+                hierarchyInput.value = hierarchyText.trim();
+                updateTreePreview();
+                
+            } catch (error) {
+                alert('Error reading .docx file: ' + error.message);
+            }
+        }
+
+        // Parse HTML from Word to indented hierarchy text
+        function parseHtmlToHierarchy(element, level = 0) {
+            let result = '';
+            const indent = '    '.repeat(level);
+            
+            for (const child of element.childNodes) {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    const text = child.textContent.trim();
+                    if (text) result += indent + text + '\n';
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    const tagName = child.tagName.toLowerCase();
+                    
+                    if (tagName === 'ul' || tagName === 'ol') {
+                        for (const li of child.children) {
+                            if (li.tagName.toLowerCase() === 'li') {
+                                result += parseLiElement(li, level);
+                            }
+                        }
+                    } else if (tagName === 'p' || tagName.match(/^h[1-6]$/)) {
+                        const text = getDirectText(child).trim();
+                        if (text) {
+                            const headingLevel = tagName.startsWith('h') ? 
+                                Math.max(0, parseInt(tagName[1]) - 1) : level;
+                            result += '    '.repeat(headingLevel) + text + '\n';
+                        }
+                        for (const subChild of child.children) {
+                            if (subChild.tagName.toLowerCase() === 'ul' || 
+                                subChild.tagName.toLowerCase() === 'ol') {
+                                result += parseHtmlToHierarchy(subChild, level + 1);
+                            }
+                        }
+                    } else {
+                        result += parseHtmlToHierarchy(child, level);
+                    }
+                }
+            }
+            return result;
+        }
+
+        function parseLiElement(li, level) {
+            let result = '';
+            const indent = '    '.repeat(level);
+            const text = getDirectText(li).trim();
+            if (text) result += indent + text + '\n';
+            
+            for (const child of li.children) {
+                const tagName = child.tagName.toLowerCase();
+                if (tagName === 'ul' || tagName === 'ol') {
+                    for (const nestedLi of child.children) {
+                        if (nestedLi.tagName.toLowerCase() === 'li') {
+                            result += parseLiElement(nestedLi, level + 1);
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        function getDirectText(element) {
+            let text = '';
+            for (const child of element.childNodes) {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    text += child.textContent;
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    const tagName = child.tagName.toLowerCase();
+                    if (tagName !== 'ul' && tagName !== 'ol' && tagName !== 'li') {
+                        text += getDirectText(child);
+                    }
+                }
+            }
+            return text;
+        }
+
+        // Template selection
+        templateSelect.addEventListener('change', (e) => {
+            if (e.target.value && templates[e.target.value]) {
+                hierarchyInput.value = templates[e.target.value];
+                updateTreePreview();
+                e.target.value = '';
+            }
+        });
+
+        // Parse hierarchy from text
+        function parseHierarchy(text) {
+            const lines = text.split('\n').filter(line => line.trim());
+            const root = { text: 'Root', children: [], level: -1 };
+            const stack = [root];
+
+            lines.forEach(line => {
+                const trimmed = line.trimEnd();
+                const indent = line.search(/\S/);
+                const level = Math.floor(indent / 4) || (indent > 0 ? Math.floor(indent / 2) : 0);
+                const text = trimmed.trim();
+
+                if (!text) return;
+
+                const node = { text, children: [], level };
+
+                while (stack.length > 1 && stack[stack.length - 1].level >= level) {
+                    stack.pop();
+                }
+
+                stack[stack.length - 1].children.push(node);
+                stack.push(node);
+            });
+
+            return root.children;
+        }
+
+        // Calculate node dimensions with padding and text wrapping
+        function getNodeDimensions(text, fontSize) {
+            ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            const singleLineWidth = ctx.measureText(text).width;
+            const padding = 20;
+            const lineHeight = fontSize + 8;
+            
+            // If text fits in max width, use single line
+            if (singleLineWidth + padding * 2 <= MAX_NODE_WIDTH) {
+                const width = Math.max(singleLineWidth + padding * 2, MIN_NODE_WIDTH);
+                const height = lineHeight + padding * 2;
+                return { width, height, lines: [text] };
+            }
+            
+            // Wrap text for longer content
+            const lines = wrapText(text, fontSize, MAX_NODE_WIDTH);
+            let maxLineWidth = 0;
+            
+            for (const line of lines) {
+                const lineWidth = ctx.measureText(line).width;
+                maxLineWidth = Math.max(maxLineWidth, lineWidth);
+            }
+            
+            const width = Math.max(Math.min(maxLineWidth + padding * 2, MAX_NODE_WIDTH), MIN_NODE_WIDTH);
+            const height = (lines.length * lineHeight) + padding * 2;
+            
+            return { width, height, lines };
+        }
+
+        // Build flat node list with tree structure
+        function buildNodeList(hierarchy, options) {
+            const nodes = [];
+            let nodeId = 0;
+            
+            function processNode(item, level, parent) {
+                const dims = getNodeDimensions(item.text, options.fontSize);
+                const node = {
+                    id: nodeId++,
+                    text: item.text,
+                    level: level,
+                    width: dims.width,
+                    height: dims.height,
+                    lines: dims.lines || [item.text],
+                    x: 0,
+                    y: 0,
+                    parent: parent,
+                    children: []
+                };
+                nodes.push(node);
+                
+                if (item.children) {
+                    item.children.forEach(child => {
+                        const childNode = processNode(child, level + 1, node);
+                        node.children.push(childNode);
+                    });
+                }
+                
+                return node;
+            }
+            
+            hierarchy.forEach(item => processNode(item, 0, null));
+            return nodes;
+        }
+
+        // Calculate subtree dimensions for proper spacing
+        function getSubtreeSize(node, options, isVertical) {
+            if (node.children.length === 0) {
+                return { width: node.width, height: node.height };
+            }
+            
+            const childSizes = node.children.map(child => getSubtreeSize(child, options, isVertical));
+            
+            if (isVertical) {
+                // Top-down: children spread horizontally
+                const totalChildWidth = childSizes.reduce((sum, s) => sum + s.width, 0) + (node.children.length - 1) * NODE_H_SPACING;
+                const maxChildHeight = Math.max(...childSizes.map(s => s.height));
+                return {
+                    width: Math.max(node.width, totalChildWidth),
+                    height: node.height + LEVEL_GAP + maxChildHeight
+                };
+            } else {
+                // Left-right: children spread vertically
+                const totalChildHeight = childSizes.reduce((sum, s) => sum + s.height, 0) + (node.children.length - 1) * NODE_V_SPACING;
+                const maxChildWidth = Math.max(...childSizes.map(s => s.width));
+                return {
+                    width: node.width + LEVEL_GAP + maxChildWidth,
+                    height: Math.max(node.height, totalChildHeight)
+                };
+            }
+        }
+
+        // Position nodes using proper tree layout
+        function layoutTree(node, x, y, options, isVertical) {
+            const subtreeSize = getSubtreeSize(node, options, isVertical);
+            
+            if (isVertical) {
+                // Center node at top of its subtree area
+                node.x = x + (subtreeSize.width - node.width) / 2;
+                node.y = y;
+                
+                if (node.children.length > 0) {
+                    const childSizes = node.children.map(child => getSubtreeSize(child, options, isVertical));
+                    const totalChildWidth = childSizes.reduce((sum, s) => sum + s.width, 0) + (node.children.length - 1) * NODE_H_SPACING;
+                    let childX = x + (subtreeSize.width - totalChildWidth) / 2;
+                    const childY = y + node.height + LEVEL_GAP;
+                    
+                    node.children.forEach((child, i) => {
+                        layoutTree(child, childX, childY, options, isVertical);
+                        childX += childSizes[i].width + NODE_H_SPACING;
+                    });
+                }
+            } else {
+                // Center node at left of its subtree area
+                node.x = x;
+                node.y = y + (subtreeSize.height - node.height) / 2;
+                
+                if (node.children.length > 0) {
+                    const childSizes = node.children.map(child => getSubtreeSize(child, options, isVertical));
+                    const totalChildHeight = childSizes.reduce((sum, s) => sum + s.height, 0) + (node.children.length - 1) * NODE_V_SPACING;
+                    const childX = x + node.width + LEVEL_GAP;
+                    let childY = y + (subtreeSize.height - totalChildHeight) / 2;
+                    
+                    node.children.forEach((child, i) => {
+                        layoutTree(child, childX, childY, options, isVertical);
+                        childY += childSizes[i].height + NODE_V_SPACING;
+                    });
+                }
+            }
+        }
+
+        // Get colors for a specific depth level
+        function getLevelColor(depth, scheme) {
+            const colors = colorSchemes[scheme] || colorSchemes.pastel;
+            return colors[Math.min(depth, colors.length - 1)];
+        }
+
+        function getLevelTextColor(depth, scheme) {
+            const colors = textColors[scheme] || textColors.pastel;
+            return colors[Math.min(depth, colors.length - 1)];
+        }
+
+        function getLevelBorderColor(depth, scheme) {
+            const colors = borderColors[scheme] || borderColors.pastel;
+            return colors[Math.min(depth, colors.length - 1)];
+        }
+
+        // Draw straight-line connectors for all nodes
+        function drawConnectors(nodes, options) {
+            const isVertical = options.layoutStyle === 'vertical';
+            
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            nodes.forEach(node => {
+                if (node.children.length === 0) return;
+                
+                if (isVertical) {
+                    // Parent connects from bottom center
+                    const parentX = node.x + node.width / 2;
+                    const parentY = node.y + node.height;
+                    
+                    // Midpoint Y for horizontal backbone
+                    const midY = parentY + LEVEL_GAP / 2;
+                    
+                    // Draw line from parent to midpoint
+                    ctx.beginPath();
+                    ctx.moveTo(parentX, parentY);
+                    ctx.lineTo(parentX, midY);
+                    ctx.stroke();
+                    
+                    if (node.children.length === 1) {
+                        // Single child - straight line down
+                        const child = node.children[0];
+                        const childX = child.x + child.width / 2;
+                        ctx.beginPath();
+                        ctx.moveTo(parentX, midY);
+                        ctx.lineTo(childX, midY);
+                        ctx.lineTo(childX, child.y);
+                        ctx.stroke();
+                    } else {
+                        // Multiple children - horizontal backbone
+                        const leftChild = node.children[0];
+                        const rightChild = node.children[node.children.length - 1];
+                        const leftX = leftChild.x + leftChild.width / 2;
+                        const rightX = rightChild.x + rightChild.width / 2;
+                        
+                        // Draw horizontal backbone
+                        ctx.beginPath();
+                        ctx.moveTo(leftX, midY);
+                        ctx.lineTo(rightX, midY);
+                        ctx.stroke();
+                        
+                        // Draw vertical lines to each child
+                        node.children.forEach(child => {
+                            const childX = child.x + child.width / 2;
+                            ctx.beginPath();
+                            ctx.moveTo(childX, midY);
+                            ctx.lineTo(childX, child.y);
+                            ctx.stroke();
+                        });
+                    }
+                } else {
+                    // Parent connects from right center
+                    const parentX = node.x + node.width;
+                    const parentY = node.y + node.height / 2;
+                    
+                    // Midpoint X for vertical backbone
+                    const midX = parentX + LEVEL_GAP / 2;
+                    
+                    // Draw line from parent to midpoint
+                    ctx.beginPath();
+                    ctx.moveTo(parentX, parentY);
+                    ctx.lineTo(midX, parentY);
+                    ctx.stroke();
+                    
+                    if (node.children.length === 1) {
+                        // Single child - straight line right
+                        const child = node.children[0];
+                        const childY = child.y + child.height / 2;
+                        ctx.beginPath();
+                        ctx.moveTo(midX, parentY);
+                        ctx.lineTo(midX, childY);
+                        ctx.lineTo(child.x, childY);
+                        ctx.stroke();
+                    } else {
+                        // Multiple children - vertical backbone
+                        const topChild = node.children[0];
+                        const bottomChild = node.children[node.children.length - 1];
+                        const topY = topChild.y + topChild.height / 2;
+                        const bottomY = bottomChild.y + bottomChild.height / 2;
+                        
+                        // Draw vertical backbone
+                        ctx.beginPath();
+                        ctx.moveTo(midX, topY);
+                        ctx.lineTo(midX, bottomY);
+                        ctx.stroke();
+                        
+                        // Draw horizontal lines to each child
+                        node.children.forEach(child => {
+                            const childY = child.y + child.height / 2;
+                            ctx.beginPath();
+                            ctx.moveTo(midX, childY);
+                            ctx.lineTo(child.x, childY);
+                            ctx.stroke();
+                        });
+                    }
+                }
+            });
+        }
+
+        // Draw a single node box
+        function drawNode(node, options, isHighlighted = false) {
+            const bgColor = getLevelColor(node.level, options.colorScheme);
+            const txtColor = getLevelTextColor(node.level, options.colorScheme);
+            const brdColor = getLevelBorderColor(node.level, options.colorScheme);
+            
+            // Shadow
+            ctx.shadowColor = isHighlighted ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)';
+            ctx.shadowBlur = isHighlighted ? 15 : 8;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = isHighlighted ? 5 : 3;
+
+            // Fill background
+            ctx.fillStyle = bgColor;
+            ctx.beginPath();
+
+            const radius = options.boxStyle === 'pill' ? Math.min(node.height / 2, 20) : (options.boxStyle === 'rounded' ? 10 : 0);
+            
+            if (radius > 0) {
+                ctx.roundRect(node.x, node.y, node.width, node.height, radius);
+            } else {
+                ctx.rect(node.x, node.y, node.width, node.height);
+            }
+            ctx.fill();
+
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Draw border
+            ctx.strokeStyle = brdColor;
+            ctx.lineWidth = isHighlighted ? 3 : 2;
+            ctx.beginPath();
+            if (radius > 0) {
+                ctx.roundRect(node.x, node.y, node.width, node.height, radius);
+            } else {
+                ctx.rect(node.x, node.y, node.width, node.height);
+            }
+            ctx.stroke();
+
+            // Draw text (multi-line support)
+            ctx.fillStyle = txtColor;
+            ctx.font = `600 ${options.fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const lines = node.lines || [node.text];
+            const lineHeight = options.fontSize + 8;
+            const totalTextHeight = lines.length * lineHeight;
+            const startY = node.y + (node.height - totalTextHeight) / 2 + lineHeight / 2;
+            
+            lines.forEach((line, index) => {
+                ctx.fillText(line, node.x + node.width / 2, startY + index * lineHeight);
+            });
+        }
+
+        // Redraw entire canvas
+        function redrawCanvas() {
+            // Clear canvas
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, displayWidth, displayHeight);
+            
+            // Draw connectors first (behind nodes)
+            drawConnectors(allNodes, currentOptions);
+            
+            // Draw all nodes
+            allNodes.forEach(node => {
+                const isHighlighted = dragNode && node.id === dragNode.id;
+                drawNode(node, currentOptions, isHighlighted);
+            });
+        }
+
+        // Get canvas coordinates from mouse event (accounts for zoom)
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const zoomFactor = currentZoom / 100;
+            const scaleX = displayWidth / (rect.width / zoomFactor);
+            const scaleY = displayHeight / (rect.height / zoomFactor);
+            return {
+                x: (e.clientX - rect.left) * scaleX / zoomFactor,
+                y: (e.clientY - rect.top) * scaleY / zoomFactor
+            };
+        }
+
+        // Find node at position
+        function findNodeAtPosition(x, y) {
+            // Check in reverse order (top nodes first)
+            for (let i = allNodes.length - 1; i >= 0; i--) {
+                const node = allNodes[i];
+                if (x >= node.x && x <= node.x + node.width &&
+                    y >= node.y && y <= node.y + node.height) {
+                    return node;
+                }
+            }
+            return null;
+        }
+
+        // Mouse event handlers for drag and drop
+        canvas.addEventListener('mousedown', (e) => {
+            const coords = getCanvasCoords(e);
+            const node = findNodeAtPosition(coords.x, coords.y);
+            
+            if (node) {
+                isDragging = true;
+                dragNode = node;
+                dragOffsetX = coords.x - node.x;
+                dragOffsetY = coords.y - node.y;
+                canvas.style.cursor = 'grabbing';
+                redrawCanvas();
+            }
+        });
+
+        // Move a node and all its descendants by a delta
+        function moveNodeWithDescendants(node, deltaX, deltaY) {
+            node.x += deltaX;
+            node.y += deltaY;
+            
+            if (node.children && node.children.length > 0) {
+                node.children.forEach(child => {
+                    moveNodeWithDescendants(child, deltaX, deltaY);
+                });
+            }
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const coords = getCanvasCoords(e);
+            
+            if (isDragging && dragNode) {
+                const newX = coords.x - dragOffsetX;
+                const newY = coords.y - dragOffsetY;
+                
+                // Calculate the delta movement
+                const deltaX = newX - dragNode.x;
+                const deltaY = newY - dragNode.y;
+                
+                // Check if we should move branches too
+                const moveBranches = document.getElementById('moveBranches').checked;
+                
+                if (moveBranches) {
+                    // Move the node and all its descendants
+                    moveNodeWithDescendants(dragNode, deltaX, deltaY);
+                } else {
+                    // Move only this node
+                    dragNode.x = newX;
+                    dragNode.y = newY;
+                }
+                
+                redrawCanvas();
+            } else {
+                // Change cursor on hover
+                const node = findNodeAtPosition(coords.x, coords.y);
+                canvas.style.cursor = node ? 'grab' : 'default';
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                dragNode = null;
+                canvas.style.cursor = 'default';
+                redrawCanvas();
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            if (isDragging) {
+                isDragging = false;
+                dragNode = null;
+                canvas.style.cursor = 'default';
+                redrawCanvas();
+            }
+        });
+
+        // Generate flowchart
+        generateBtn.addEventListener('click', () => {
+            const text = hierarchyInput.value.trim();
+            if (!text) {
+                alert('Please enter a hierarchy or upload a .docx file');
+                return;
+            }
+
+            const hierarchy = parseHierarchy(text);
+            if (hierarchy.length === 0) {
+                alert('Could not parse hierarchy. Check your input format.');
+                return;
+            }
+
+            currentHierarchy = hierarchy;
+
+            currentOptions = {
+                colorScheme: document.getElementById('colorScheme').value,
+                fontSize: parseInt(document.getElementById('fontSize').value),
+                boxStyle: document.getElementById('boxStyle').value,
+                layoutStyle: document.getElementById('layoutStyle').value
+            };
+
+            const isVertical = currentOptions.layoutStyle === 'vertical';
+
+            // Build node list
+            allNodes = buildNodeList(hierarchy, currentOptions);
+            
+            // Find root nodes (nodes without parents)
+            const rootNodes = allNodes.filter(n => n.parent === null);
+            
+            // Calculate total size needed
+            let totalWidth = 0;
+            let totalHeight = 0;
+            
+            rootNodes.forEach(root => {
+                const size = getSubtreeSize(root, currentOptions, isVertical);
+                if (isVertical) {
+                    totalWidth += size.width + NODE_H_SPACING;
+                    totalHeight = Math.max(totalHeight, size.height);
+                } else {
+                    totalHeight += size.height + NODE_V_SPACING;
+                    totalWidth = Math.max(totalWidth, size.width);
+                }
+            });
+            
+            if (isVertical) {
+                totalWidth -= NODE_H_SPACING;
+            } else {
+                totalHeight -= NODE_V_SPACING;
+            }
+            
+            // Add margins
+            const margin = 60;
+            const contentWidth = totalWidth + margin * 2;
+            const contentHeight = totalHeight + margin * 2;
+            
+            // Calculate canvas size maintaining A4 landscape ratio
+            const A4_RATIO = 297 / 210;
+            let canvasWidth, canvasHeight;
+            
+            if (contentWidth / contentHeight > A4_RATIO) {
+                canvasWidth = contentWidth;
+                canvasHeight = canvasWidth / A4_RATIO;
+            } else {
+                canvasHeight = contentHeight;
+                canvasWidth = canvasHeight * A4_RATIO;
+            }
+            
+            // Minimum canvas size
+            canvasWidth = Math.max(canvasWidth, 1190);
+            canvasHeight = Math.max(canvasHeight, 842);
+            
+            // Round up
+            canvasWidth = Math.ceil(canvasWidth);
+            canvasHeight = Math.ceil(canvasWidth / A4_RATIO);
+            
+            displayWidth = canvasWidth;
+            displayHeight = canvasHeight;
+
+            // Set canvas size (2x for high resolution)
+            canvasScale = 2;
+            canvas.width = canvasWidth * canvasScale;
+            canvas.height = canvasHeight * canvasScale;
+            canvas.style.width = canvasWidth + 'px';
+            canvas.style.height = canvasHeight + 'px';
+            ctx.setTransform(canvasScale, 0, 0, canvasScale, 0, 0);
+
+            // Position root nodes
+            let currentPos = isVertical 
+                ? (canvasWidth - totalWidth) / 2 
+                : (canvasHeight - totalHeight) / 2;
+            
+            rootNodes.forEach(root => {
+                const size = getSubtreeSize(root, currentOptions, isVertical);
+                
+                if (isVertical) {
+                    const startY = (canvasHeight - size.height) / 2;
+                    layoutTree(root, currentPos, startY, currentOptions, isVertical);
+                    currentPos += size.width + NODE_H_SPACING;
+                } else {
+                    const startX = (canvasWidth - size.width) / 2;
+                    layoutTree(root, startX, currentPos, currentOptions, isVertical);
+                    currentPos += size.height + NODE_V_SPACING;
+                }
+            });
+
+            // Draw everything
+            redrawCanvas();
+
+            canvasInfo.textContent = `A4 Landscape • ${canvasWidth}×${canvasHeight}px • Export: ${canvas.width}×${canvas.height}px • Ctrl+Scroll to zoom`;
+            
+            updateColorLegend(currentOptions.colorScheme);
+            updatePageInfo();
+        });
+
+        // Update color legend
+        function updateColorLegend(scheme) {
+            const legend = document.getElementById('colorLegend');
+            const bgColors = colorSchemes[scheme] || colorSchemes.pastel;
+            const borders = borderColors[scheme] || borderColors.pastel;
+            
+            legend.innerHTML = '<span class="font-medium text-slate-600">Levels:</span>';
+            
+            const levelCount = Math.min(10, maxLevel + 1);
+            for (let i = 0; i < Math.max(levelCount, 1); i++) {
+                const span = document.createElement('span');
+                span.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs';
+                span.innerHTML = `<span class="w-3 h-3 rounded" style="background:${bgColors[i]}; border: 2px solid ${borders[i]}"></span><span class="text-slate-600">L${i + 1}</span>`;
+                legend.appendChild(span);
+            }
+        }
+
+        document.getElementById('colorScheme').addEventListener('change', (e) => {
+            updateColorLegend(e.target.value);
+            updateTreePreview();
+            // Update tree color label
+            const schemeNames = {
+                pastel: 'Pastel Rainbow',
+                soft: 'Soft Tones',
+                ocean: 'Ocean Blues',
+                forest: 'Forest Greens',
+                sunset: 'Warm Sunset',
+                lavender: 'Lavender Dreams',
+                monotone: 'Monotone'
+            };
+            document.getElementById('treeColorLabel').textContent = schemeNames[e.target.value] || 'Pastel Rainbow';
+            if (allNodes.length > 0) {
+                currentOptions.colorScheme = e.target.value;
+                redrawCanvas();
+            }
+        });
+        
+        updateColorLegend('pastel');
+
+        // Export PNG - Exact view with selectable quality
+        exportPngBtn.addEventListener('click', () => {
+            if (allNodes.length === 0) {
+                alert('Generate a flowchart first');
+                return;
+            }
+
+            const quality = parseInt(document.getElementById('exportQuality').value);
+            
+            // Create export canvas at selected quality
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = displayWidth * quality;
+            exportCanvas.height = displayHeight * quality;
+            const exportCtx = exportCanvas.getContext('2d');
+            
+            // Scale for quality
+            exportCtx.setTransform(quality, 0, 0, quality, 0, 0);
+            
+            // Fill white background
+            exportCtx.fillStyle = '#ffffff';
+            exportCtx.fillRect(0, 0, displayWidth, displayHeight);
+            
+            // Draw connectors
+            const isVertical = currentOptions.layoutStyle === 'vertical';
+            exportCtx.strokeStyle = '#1e293b';
+            exportCtx.lineWidth = 2;
+            exportCtx.lineCap = 'round';
+            exportCtx.lineJoin = 'round';
+            
+            allNodes.forEach(node => {
+                if (node.children.length === 0) return;
+                
+                if (isVertical) {
+                    const parentX = node.x + node.width / 2;
+                    const parentY = node.y + node.height;
+                    const midY = parentY + LEVEL_GAP / 2;
+                    
+                    exportCtx.beginPath();
+                    exportCtx.moveTo(parentX, parentY);
+                    exportCtx.lineTo(parentX, midY);
+                    exportCtx.stroke();
+                    
+                    if (node.children.length === 1) {
+                        const child = node.children[0];
+                        const childX = child.x + child.width / 2;
+                        exportCtx.beginPath();
+                        exportCtx.moveTo(parentX, midY);
+                        exportCtx.lineTo(childX, midY);
+                        exportCtx.lineTo(childX, child.y);
+                        exportCtx.stroke();
+                    } else {
+                        const leftChild = node.children[0];
+                        const rightChild = node.children[node.children.length - 1];
+                        const leftX = leftChild.x + leftChild.width / 2;
+                        const rightX = rightChild.x + rightChild.width / 2;
+                        
+                        exportCtx.beginPath();
+                        exportCtx.moveTo(leftX, midY);
+                        exportCtx.lineTo(rightX, midY);
+                        exportCtx.stroke();
+                        
+                        node.children.forEach(child => {
+                            const childX = child.x + child.width / 2;
+                            exportCtx.beginPath();
+                            exportCtx.moveTo(childX, midY);
+                            exportCtx.lineTo(childX, child.y);
+                            exportCtx.stroke();
+                        });
+                    }
+                } else {
+                    const parentX = node.x + node.width;
+                    const parentY = node.y + node.height / 2;
+                    const midX = parentX + LEVEL_GAP / 2;
+                    
+                    exportCtx.beginPath();
+                    exportCtx.moveTo(parentX, parentY);
+                    exportCtx.lineTo(midX, parentY);
+                    exportCtx.stroke();
+                    
+                    if (node.children.length === 1) {
+                        const child = node.children[0];
+                        const childY = child.y + child.height / 2;
+                        exportCtx.beginPath();
+                        exportCtx.moveTo(midX, parentY);
+                        exportCtx.lineTo(midX, childY);
+                        exportCtx.lineTo(child.x, childY);
+                        exportCtx.stroke();
+                    } else {
+                        const topChild = node.children[0];
+                        const bottomChild = node.children[node.children.length - 1];
+                        const topY = topChild.y + topChild.height / 2;
+                        const bottomY = bottomChild.y + bottomChild.height / 2;
+                        
+                        exportCtx.beginPath();
+                        exportCtx.moveTo(midX, topY);
+                        exportCtx.lineTo(midX, bottomY);
+                        exportCtx.stroke();
+                        
+                        node.children.forEach(child => {
+                            const childY = child.y + child.height / 2;
+                            exportCtx.beginPath();
+                            exportCtx.moveTo(midX, childY);
+                            exportCtx.lineTo(child.x, childY);
+                            exportCtx.stroke();
+                        });
+                    }
+                }
+            });
+            
+            // Draw nodes
+            allNodes.forEach(node => {
+                const bgColor = getLevelColor(node.level, currentOptions.colorScheme);
+                const txtColor = getLevelTextColor(node.level, currentOptions.colorScheme);
+                const brdColor = getLevelBorderColor(node.level, currentOptions.colorScheme);
+                
+                exportCtx.shadowColor = 'rgba(0,0,0,0.1)';
+                exportCtx.shadowBlur = 8;
+                exportCtx.shadowOffsetX = 0;
+                exportCtx.shadowOffsetY = 3;
+
+                exportCtx.fillStyle = bgColor;
+                exportCtx.beginPath();
+
+                const radius = currentOptions.boxStyle === 'pill' ? Math.min(node.height / 2, 20) : (currentOptions.boxStyle === 'rounded' ? 10 : 0);
+                
+                if (radius > 0) {
+                    exportCtx.roundRect(node.x, node.y, node.width, node.height, radius);
+                } else {
+                    exportCtx.rect(node.x, node.y, node.width, node.height);
+                }
+                exportCtx.fill();
+
+                exportCtx.shadowColor = 'transparent';
+                exportCtx.shadowBlur = 0;
+
+                exportCtx.strokeStyle = brdColor;
+                exportCtx.lineWidth = 2;
+                exportCtx.beginPath();
+                if (radius > 0) {
+                    exportCtx.roundRect(node.x, node.y, node.width, node.height, radius);
+                } else {
+                    exportCtx.rect(node.x, node.y, node.width, node.height);
+                }
+                exportCtx.stroke();
+
+                exportCtx.fillStyle = txtColor;
+                exportCtx.font = `600 ${currentOptions.fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                exportCtx.textAlign = 'center';
+                exportCtx.textBaseline = 'middle';
+                
+                const lines = node.lines || [node.text];
+                const lineHeight = currentOptions.fontSize + 8;
+                const totalTextHeight = lines.length * lineHeight;
+                const startY = node.y + (node.height - totalTextHeight) / 2 + lineHeight / 2;
+                
+                lines.forEach((line, index) => {
+                    exportCtx.fillText(line, node.x + node.width / 2, startY + index * lineHeight);
+                });
+            });
+            
+            // Download
+            const link = document.createElement('a');
+            const dimensions = `${exportCanvas.width}x${exportCanvas.height}`;
+            link.download = `flowchart-${dimensions}.png`;
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // Export TXT
+        exportTxtBtn.addEventListener('click', () => {
+            const text = hierarchyInput.value.trim();
+            if (!text) {
+                alert('No hierarchy to export');
+                return;
+            }
+
+            const blob = new Blob([text], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.download = 'flowchart-hierarchy.txt';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+        });
+
+        // Export to draw.io XML format
+        document.getElementById('exportDrawio').addEventListener('click', () => {
+            if (allNodes.length === 0) {
+                alert('Generate a flowchart first');
+                return;
+            }
+
+            const xml = generateDrawioXML();
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const link = document.createElement('a');
+            link.download = 'flowchart.drawio';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+        });
+
+        // Generate draw.io compatible XML
+        function generateDrawioXML() {
+            const isVertical = currentOptions.layoutStyle === 'vertical';
+            let cellId = 2; // 0 and 1 are reserved
+            
+            // Build cells array
+            let cells = '';
+            const nodeIdMap = new Map();
+            
+            // Create node cells
+            allNodes.forEach(node => {
+                const id = cellId++;
+                nodeIdMap.set(node.id, id);
+                
+                const bgColor = getLevelColor(node.level, currentOptions.colorScheme);
+                const borderColor = getLevelBorderColor(node.level, currentOptions.colorScheme);
+                const textColor = getLevelTextColor(node.level, currentOptions.colorScheme);
+                
+                // Get rounded style
+                let style = `rounded=${currentOptions.boxStyle === 'rounded' || currentOptions.boxStyle === 'pill' ? 1 : 0};`;
+                style += `whiteSpace=wrap;html=1;`;
+                style += `fillColor=${bgColor};`;
+                style += `strokeColor=${borderColor};`;
+                style += `fontColor=${textColor};`;
+                style += `fontSize=${currentOptions.fontSize};`;
+                style += `fontStyle=1;`; // Bold
+                
+                if (currentOptions.boxStyle === 'pill') {
+                    style += `arcSize=50;`;
+                }
+                
+                const text = node.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                cells += `<mxCell id="${id}" value="${text}" style="${style}" vertex="1" parent="1">
+                    <mxGeometry x="${Math.round(node.x)}" y="${Math.round(node.y)}" width="${Math.round(node.width)}" height="${Math.round(node.height)}" as="geometry"/>
+                </mxCell>\n`;
+            });
+            
+            // Create edge cells (connectors)
+            allNodes.forEach(node => {
+                if (node.children.length === 0) return;
+                
+                const sourceId = nodeIdMap.get(node.id);
+                
+                node.children.forEach(child => {
+                    const targetId = nodeIdMap.get(child.id);
+                    const edgeId = cellId++;
+                    
+                    let exitX, exitY, entryX, entryY;
+                    if (isVertical) {
+                        exitX = 0.5; exitY = 1;   // Bottom center
+                        entryX = 0.5; entryY = 0; // Top center
+                    } else {
+                        exitX = 1; exitY = 0.5;   // Right center
+                        entryX = 0; entryY = 0.5; // Left center
+                    }
+                    
+                    const style = `edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1e293b;strokeWidth=2;exitX=${exitX};exitY=${exitY};exitDx=0;exitDy=0;entryX=${entryX};entryY=${entryY};entryDx=0;entryDy=0;`;
+                    
+                    cells += `<mxCell id="${edgeId}" style="${style}" edge="1" parent="1" source="${sourceId}" target="${targetId}">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>\n`;
+                });
+            });
+            
+            // Build full XML
+            const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="${new Date().toISOString()}" agent="Flowchart Generator" version="21.0.0" type="device">
+  <diagram name="Flowchart" id="flowchart-1">
+    <mxGraphModel dx="${Math.round(displayWidth)}" dy="${Math.round(displayHeight)}" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="${Math.round(displayWidth)}" pageHeight="${Math.round(displayHeight)}" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        ${cells}
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>`;
+            
+            return xml;
+        }
+
+        // Update page info when flowchart is generated
+        function updatePageInfo() {
+            const pageInfo = document.getElementById('pageInfo');
+            const pageCount = document.getElementById('pageCount');
+            const pageDimensions = document.getElementById('pageDimensions');
+            
+            if (allNodes.length === 0) {
+                pageInfo.classList.add('hidden');
+                return;
+            }
+            
+            pageInfo.classList.remove('hidden');
+            
+            const quality = parseInt(document.getElementById('exportQuality').value);
+            const exportW = displayWidth * quality;
+            const exportH = displayHeight * quality;
+            
+            pageCount.textContent = `📐 Export: ${exportW}×${exportH}px at ${quality}x quality • Exactly what you see!`;
+            pageDimensions.textContent = `Canvas: ${displayWidth}×${displayHeight}px (A4 Landscape ratio)`;
+        }
+        
+        // Update info when quality changes
+        document.getElementById('exportQuality').addEventListener('change', updatePageInfo);
+
+        // Update page info after generating
+        generateBtn.addEventListener('click', () => {
+            setTimeout(updatePageInfo, 100);
+        });
+
+        // Export Tree Preview as Image
+        document.getElementById('exportTreeBtn').addEventListener('click', () => {
+            const text = hierarchyInput.value.trim();
+            if (!text) {
+                alert('No hierarchy to export');
+                return;
+            }
+            
+            const lines = text.split('\n').filter(line => line.trim());
+            if (lines.length === 0) {
+                alert('No hierarchy to export');
+                return;
+            }
+            
+            const scheme = document.getElementById('colorScheme').value;
+            const borders = borderColors[scheme] || borderColors.pastel;
+            const bgColors = colorSchemes[scheme] || colorSchemes.pastel;
+            
+            // Parse hierarchy with bullets
+            const parsed = [];
+            const levelCounters = {};
+            
+            lines.forEach(line => {
+                const indent = line.search(/\S/);
+                const level = Math.floor(indent / 4) || (indent > 0 ? Math.floor(indent / 2) : 0);
+                
+                Object.keys(levelCounters).forEach(l => {
+                    if (parseInt(l) > level) delete levelCounters[l];
+                });
+                
+                levelCounters[level] = (levelCounters[level] || 0) + 1;
+                
+                // Get styled bullet for this level
+                const bullet = getBullet(level, levelCounters[level]);
+                
+                parsed.push({ text: line.trim(), level, bullet });
+            });
+            
+            // Calculate canvas size
+            const fontSize = 14;
+            const lineHeight = 28;
+            const padding = 30;
+            const charWidth = 8;
+            
+            let maxWidth = 0;
+            parsed.forEach((item, index) => {
+                const branchChars = item.level * 4;
+                const bulletWidth = item.bullet.length * 8 + 30;
+                const textWidth = item.text.length * charWidth;
+                const totalWidth = branchChars * charWidth + bulletWidth + textWidth;
+                maxWidth = Math.max(maxWidth, totalWidth);
+            });
+            
+            const canvasWidth = Math.max(maxWidth + padding * 2, 400);
+            const canvasHeight = parsed.length * lineHeight + padding * 2;
+            
+            // Create canvas
+            const treeCanvas = document.createElement('canvas');
+            const scale = 2;
+            treeCanvas.width = canvasWidth * scale;
+            treeCanvas.height = canvasHeight * scale;
+            const treeCtx = treeCanvas.getContext('2d');
+            treeCtx.scale(scale, scale);
+            
+            // White background
+            treeCtx.fillStyle = '#ffffff';
+            treeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+            
+            // Draw tree
+            treeCtx.font = `500 ${fontSize}px 'SF Mono', Monaco, Consolas, monospace`;
+            
+            parsed.forEach((item, index) => {
+                const y = padding + index * lineHeight + lineHeight / 2;
+                let x = padding;
+                
+                // Draw branch lines
+                treeCtx.fillStyle = '#94a3b8';
+                treeCtx.font = `400 ${fontSize}px 'SF Mono', Monaco, Consolas, monospace`;
+                
+                for (let i = 0; i < item.level; i++) {
+                    if (i < item.level - 1) {
+                        let hasMoreAtThisLevel = false;
+                        for (let j = index + 1; j < parsed.length; j++) {
+                            if (parsed[j].level <= i) {
+                                hasMoreAtThisLevel = parsed.slice(index + 1, j).some(p => p.level === i + 1);
+                                break;
+                            }
+                            if (parsed[j].level === i + 1) {
+                                hasMoreAtThisLevel = true;
+                            }
+                        }
+                        treeCtx.fillText(hasMoreAtThisLevel ? '│   ' : '    ', x, y + 4);
+                    } else {
+                        let siblingAfter = false;
+                        for (let j = index + 1; j < parsed.length; j++) {
+                            if (parsed[j].level < item.level) break;
+                            if (parsed[j].level === item.level) {
+                                siblingAfter = true;
+                                break;
+                            }
+                        }
+                        treeCtx.fillText(siblingAfter ? '├── ' : '└── ', x, y + 4);
+                    }
+                    x += charWidth * 4;
+                }
+                
+                // Draw bullet badge
+                const borderColor = borders[Math.min(item.level, borders.length - 1)];
+                const bgColor = bgColors[Math.min(item.level, bgColors.length - 1)];
+                
+                treeCtx.font = `700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                const bulletWidth = Math.max(treeCtx.measureText(item.bullet).width + 12, 24);
+                const badgeHeight = 18;
+                const badgeY = y - badgeHeight / 2 - 2;
+                
+                // Badge background
+                treeCtx.fillStyle = bgColor;
+                treeCtx.beginPath();
+                treeCtx.roundRect(x, badgeY, bulletWidth, badgeHeight, 4);
+                treeCtx.fill();
+                
+                // Badge border
+                treeCtx.strokeStyle = borderColor;
+                treeCtx.lineWidth = 1;
+                treeCtx.beginPath();
+                treeCtx.roundRect(x, badgeY, bulletWidth, badgeHeight, 4);
+                treeCtx.stroke();
+                
+                // Badge text
+                treeCtx.fillStyle = borderColor;
+                treeCtx.textAlign = 'center';
+                treeCtx.fillText(item.bullet, x + bulletWidth / 2, y + 2);
+                
+                x += bulletWidth + 8;
+                
+                // Draw text
+                treeCtx.fillStyle = '#334155';
+                treeCtx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                treeCtx.textAlign = 'left';
+                treeCtx.fillText(item.text, x, y + 4);
+            });
+            
+            // Download
+            const link = document.createElement('a');
+            link.download = 'tree-hierarchy.png';
+            link.href = treeCanvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // Initial sample
+        hierarchyInput.value = templates.project;
+        updateTreePreview();
+    </script>
+</body>
+</html>
